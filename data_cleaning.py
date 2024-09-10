@@ -14,6 +14,7 @@ class DataCleaning:
         self.email_regex = r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         self.expiry_date_format = "%m/%y"
         self.payment_date_format = "%Y-%m-%d"
+        self.store_date_format= "%Y-%m-%d"
 
     def parse_phone_number(self, phone: str, region: str) -> str | None:
         """Parse a phone number from a string, given the region for the number.
@@ -143,6 +144,61 @@ class DataCleaning:
         # Finally drop any rows that have null values
         cleaned_df = cleaned_df.dropna(how='any', axis='index')
         return cleaned_df
+
+    def clean_store_data(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        """Clean data for the store DataFrame
+
+        Args:
+            dataframe (pd.DataFrame): The DataFrame that represents store data
+
+        Returns:
+            pd.DataFrame: Cleaned DataFrame
+        """
+        # Replace N/A string with pandas NA
+        cleaned_store_df = dataframe.replace('N/A', pd.NA)
+
+        # Replace pythonic None from json response to pandas NA
+        cleaned_store_df = cleaned_store_df.replace([None], pd.NA)
+
+        # Noticed the lat column appears useless, since latitude exists with values. So drop it
+        cleaned_store_df = cleaned_store_df.drop(columns=['lat'])
+
+        # Change column types
+        cleaned_store_df = cleaned_store_df.astype(
+            {
+                "address": "string",
+                "locality": "string",
+                "store_code": "string",
+                "store_type": "string",
+                "country_code": "string",
+                "continent": "string"
+            }
+        )
+
+        # Remove letters from any numbers in staff numbers
+        cleaned_store_df.staff_numbers = cleaned_store_df.staff_numbers.replace(r'[^0-9]+', '', regex=True)
+        cleaned_store_df.staff_numbers = cleaned_store_df.staff_numbers.replace('', pd.NA, regex=True)
+        cleaned_store_df.staff_numbers = pd.to_numeric(cleaned_store_df.staff_numbers, errors="coerce").astype("Int64")
+
+        # Convert long/latitude to float
+        cleaned_store_df.longitude = pd.to_numeric(cleaned_store_df.longitude, errors="coerce").astype("float")
+        cleaned_store_df.latitude = pd.to_numeric(cleaned_store_df.latitude, errors="coerce").astype("float")
+
+        # Convert opening date
+        cleaned_store_df.opening_date = pd.to_datetime(cleaned_store_df.opening_date, errors="coerce", format=self.store_date_format)
+
+        # Only get rows whose country_code is a valid one
+        country_codes = ["GB", "DE", "US"]
+        mask = cleaned_store_df.country_code.isin(country_codes)
+        cleaned_store_df = cleaned_store_df[mask]
+
+        # Correct some mistyped continent names
+        cleaned_store_df.loc[:, "continent"] = cleaned_store_df["continent"].str.replace("ee", "")
+
+        # Finally drop any rows with null values
+        cleaned_store_df = cleaned_store_df.dropna(how="any", axis="index")
+
+        return cleaned_store_df
 
 if __name__ == "__main__":
     from database_utils import DatabaseConnector

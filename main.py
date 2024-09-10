@@ -28,3 +28,7 @@ cleaned_card_details = cleaner.clean_card_data(card_details)
 local_connector.upload_to_db(cleaned_card_details, "dim_card_details")
 
 # %%
+# Clean up store data and upload to our local database as dim_store_details
+store_details = extractor.retrieve_stores_data()
+cleaned_store_details = cleaner.clean_store_data(store_details)
+local_connector.upload_to_db(cleaned_store_details, "dim_store_details")

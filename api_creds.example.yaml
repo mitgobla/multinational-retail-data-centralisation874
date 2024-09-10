@@ -1,0 +1,6 @@
+retrieve_store_url: ""
+retrieve_store_count_url: ""
+request_delay: 0.05
+header:
+  Content-Type: "application/json"
+  x-api-key: ""
