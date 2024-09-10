@@ -1,4 +1,6 @@
 import pandas as pd
+import tabula
+from typing import List
 from database_utils import DatabaseConnector
 
 
@@ -25,6 +27,12 @@ class DataExtractor:
             raise ValueError(f"{table_name} table is not in the database.")
 
         return pd.read_sql_table(table_name, self._connector.engine)
+
+    def retrieve_pdf_data(self, url: str):
+        dataframes: List[pd.DataFrame] = tabula.read_pdf(url, stream=True, pages='all')
+        merged_dfs = pd.concat(dataframes, ignore_index=True)
+        merged_dfs.reset_index(inplace=True)
+        return merged_dfs
 
 if __name__ == "__main__":
     connector = DatabaseConnector()

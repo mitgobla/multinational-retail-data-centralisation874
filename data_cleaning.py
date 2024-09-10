@@ -5,13 +5,15 @@ import pandas as pd
 
 class DataCleaning:
     """Class for cleaning data in a DataFrame"""
-    
+
     def __init__(self):
         self.date_format = "%Y-%m-%d"
 
         # Regex patterns from https://regexr.com Community Patterns
         self.uuid_regex = r'^[0-9A-Za-z]{8}-[0-9A-Za-z]{4}-4[0-9A-Za-z]{3}-[89ABab][0-9A-Za-z]{3}-[0-9A-Za-z]{12}$'
         self.email_regex = r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+        self.expiry_date_format = "%m/%y"
+        self.payment_date_format = "%Y-%m-%d"
 
     def parse_phone_number(self, phone: str, region: str) -> str | None:
         """Parse a phone number from a string, given the region for the number.
@@ -106,6 +108,40 @@ class DataCleaning:
         # Finally drop rows that have any null values
         cleaned_df = cleaned_df.dropna(how='any', axis='index')
 
+        return cleaned_df
+
+    def clean_card_data(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        """Clean data for the card DataFrame.
+
+        Args:
+            dataframe (pd.DataFrame): The DataFrame that represents card data
+
+        Returns:
+            pd.DataFrame: Cleaned DataFrame
+        """
+        # Drop columns that have been incorrectly detected by tabula
+        cleaned_df = dataframe.drop(columns=['card_number expiry_date', 'Unnamed: 0'])
+
+
+        # replace NULL with panda NA
+        cleaned_df = cleaned_df.replace("NULL", pd.NA)
+
+        # Remove any non-numeric characters from card_number
+        cleaned_df.card_number = cleaned_df.card_number.replace(r'[^0-9]+', '', regex=True)
+        cleaned_df.card_number = cleaned_df.card_number.replace('', pd.NA, regex=True)
+
+        # Convert column to their respective types
+        cleaned_df.card_number = pd.to_numeric(cleaned_df.card_number, errors='coerce').astype("Int64") # This Dtype allows null values
+        cleaned_df.card_provider = cleaned_df.card_provider.astype("string")
+        cleaned_df.expiry_date = pd.to_datetime(
+    cleaned_df.expiry_date, errors="coerce", format=self.expiry_date_format
+        )
+        cleaned_df.date_payment_confirmed = pd.to_datetime(
+            cleaned_df.date_payment_confirmed, errors="coerce", format=self.payment_date_format
+        )
+
+        # Finally drop any rows that have null values
+        cleaned_df = cleaned_df.dropna(how='any', axis='index')
         return cleaned_df
 
 if __name__ == "__main__":
