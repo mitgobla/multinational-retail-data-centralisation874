@@ -5,7 +5,7 @@ from database_utils import DatabaseConnector
 
 
 class DataExtractor:
-    """Class to handle data extraction from a database connection."""
+    """Class to handle data extraction from various sources."""
 
     def __init__(self, connector: DatabaseConnector):
         self._connector = connector
@@ -28,7 +28,15 @@ class DataExtractor:
 
         return pd.read_sql_table(table_name, self._connector.engine)
 
-    def retrieve_pdf_data(self, url: str):
+    def retrieve_pdf_data(self, url: str) -> pd.DataFrame:
+        """Return a DataFrame from tables in a PDF file.
+
+        Args:
+            url (str): The URL to the PDF file.
+
+        Returns:
+            pd.DataFrame: DataFrame representing the tables data in the PDF file.
+        """
         dataframes: List[pd.DataFrame] = tabula.read_pdf(url, stream=True, pages='all')
         merged_dfs = pd.concat(dataframes, ignore_index=True)
         merged_dfs.reset_index(inplace=True)

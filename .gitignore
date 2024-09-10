@@ -163,5 +163,5 @@ cython_debug/
 #.idea/
 
 # Other
-*db_creds.yaml
+*_creds.yaml
 pdf_url.txt
