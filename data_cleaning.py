@@ -14,7 +14,8 @@ class DataCleaning:
         self.email_regex = r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
         self.expiry_date_format = "%m/%y"
         self.payment_date_format = "%Y-%m-%d"
-        self.store_date_format= "%Y-%m-%d"
+        self.store_date_format = "%Y-%m-%d"
+        self.product_date_format = "%Y-%m-%d"
 
     def parse_phone_number(self, phone: str, region: str) -> str | None:
         """Parse a phone number from a string, given the region for the number.
@@ -199,6 +200,117 @@ class DataCleaning:
         cleaned_store_df = cleaned_store_df.dropna(how="any", axis="index")
 
         return cleaned_store_df
+
+    def convert_product_weights(self, weight: str) -> float | None:
+        """Convert a string weight value to kilograms.
+
+        - Strings ending in kg return just the value
+        - Strings ending in g will either:
+            - return just the value if there is a decimal, assumption that it's kilograms
+            - return the value divided by 1000 to convert to kilograms
+        - Strings ending in ml will be assumed 1:1 to grams and therefore divided by 1000 for kilograms
+        - Strings with an 'x' are assumed to be a multiplier i.e '12 x 125g' and therefore the final output
+          will be 0.125 * 12 = 1.25 (kg)
+
+        Args:
+            weight (str): String representing a weight to be parsed.
+
+        Returns:
+            float | None: The weight, in kilograms.
+        """
+        # value is N/A
+        if type(weight) is not str:
+            return
+
+        # Some weights have multipliers, like 12 x 250g
+        if "x" in weight:
+            multiplier, weight = weight.split("x")
+            multiplier, weight = int(multiplier.strip()), weight.strip()
+        else:
+            multiplier = 1
+
+        # pattern creates two groups, one of which is the float value of the weight, the other being the unit
+        # ([\d.]+) digit or a dot
+        # ([a-zA-Z]+) letters
+        pattern_matches = re.match(r'([\d.]+)([a-zA-Z]+)', weight)
+
+        # No matches so likely not a weight
+        if not pattern_matches:
+            return
+
+        # Try to convert value and unit
+        try:
+            value = float(pattern_matches.group(1))
+            unit = pattern_matches.group(2).lower()
+        except ValueError:
+            # value is not a float, so must be invalid
+            return
+
+        multiplied_value = multiplier * value
+
+        if unit == "g":
+            # Some gram values are meant to be kg, denoted by decimal
+            # i.e 1.2g should be 1.2kg
+            if not value.is_integer():
+                return multiplied_value
+            else:
+                return multiplied_value / 1000
+        elif unit == "ml":
+            return multiplied_value / 1000
+        elif unit == "kg":
+            # Already kilos
+            return multiplied_value
+        # Unknown unit or other
+        return
+
+    def clean_products_data(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        """Clean data for the Products DataFrame
+
+        Args:
+            dataframe (pd.DataFrame): DataFrame representing products data
+
+        Returns:
+            pd.DataFrame: Cleaned Products DataFrame
+        """
+        # Drop additional index column
+        cleaned_csv_data = dataframe.drop(columns=["Unnamed: 0"])
+
+        # Convert weights to floats
+        cleaned_csv_data.weight = cleaned_csv_data.weight.apply(self.convert_product_weights)
+        cleaned_csv_data.weight = pd.to_numeric(cleaned_csv_data.weight, errors="coerce").astype("float")
+
+        # Only allow removed or still_available, null other options
+        valid_removed_values = ["Removed", "Still_avaliable"]
+        cleaned_csv_data.loc[~cleaned_csv_data.removed.isin(valid_removed_values)] = pd.NA
+        # Convert to boolean since less storage
+        cleaned_csv_data.removed = cleaned_csv_data.removed.map({"Removed": True, "Still_avaliable": False}).astype("boolean")
+
+        # Check UUID format is correct
+        cleaned_csv_data.loc[~cleaned_csv_data.uuid.str.match(self.uuid_regex, na=False), "uuid"] = pd.NA
+
+        # Convert product_price to float
+        cleaned_csv_data.product_price = cleaned_csv_data.product_price.str.removeprefix("£")
+        cleaned_csv_data.product_price = cleaned_csv_data.product_price.astype("Float64")
+
+        # Convert column types
+        cleaned_csv_data = cleaned_csv_data.astype(
+            {
+                "product_name": "string",
+                "category": "string",
+                "product_code": "string",
+                "uuid": "string"
+            }
+        )
+        cleaned_csv_data.EAN = pd.to_numeric(cleaned_csv_data.EAN, errors="coerce").astype("int64", errors="ignore")
+
+        # Convert date column
+        cleaned_csv_data.date_added = pd.to_datetime(cleaned_csv_data.date_added, errors="coerce", format=self.product_date_format)
+
+        # Finally drop any rows with NA values
+        cleaned_csv_data = cleaned_csv_data.dropna(how="any", axis="index")
+
+        return cleaned_csv_data
+
 
 if __name__ == "__main__":
     from database_utils import DatabaseConnector

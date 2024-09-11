@@ -77,7 +77,7 @@ class DatabaseConnector:
             replace (bool, optional): Replace table if already exists. Defaults to True.
         """
         dataframe.to_sql(
-            table_name, self.engine, if_exists="replace" if replace else "fail", index=False
+            table_name, self.engine, if_exists="replace" if replace else "fail"
         )
 
 

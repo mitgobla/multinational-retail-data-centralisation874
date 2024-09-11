@@ -164,4 +164,5 @@ cython_debug/
 
 # Other
 *_creds.yaml
-pdf_url.txt
+*_url.txt
+*.csv

@@ -3,6 +3,7 @@ import tabula
 import yaml
 import requests
 import time
+import boto3
 from typing import List
 from database_utils import DatabaseConnector
 
@@ -88,6 +89,26 @@ class DataExtractor:
             time.sleep(self._api_config["request_delay"]) # sleep to avoid rate limit
 
         return pd.DataFrame(store_jsons)
+
+    def extract_from_s3(self, s3_url: str) -> pd.DataFrame:
+        """Download a CSV file from an S3 Bucket and parse it as a DataFrame
+
+        Args:
+            s3_url (str): Full URL of the file object.
+
+        Returns:
+            pd.DataFrame: DataFrame representing the CSV file.
+        """
+        # Get bucket and file key from s3 url
+        bucket, object_key = s3_url[5:].split('/', maxsplit=1)
+        filename = object_key.split('/')[-1] # if nested, this gets file from end
+        s3_client = boto3.client('s3')
+        s3_client.download_file(bucket, object_key, filename)
+
+        with open(filename, "r") as csv_file:
+            data = pd.read_csv(csv_file)
+
+        return data
 
 if __name__ == "__main__":
     connector = DatabaseConnector()

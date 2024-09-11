@@ -32,3 +32,15 @@ local_connector.upload_to_db(cleaned_card_details, "dim_card_details")
 store_details = extractor.retrieve_stores_data()
 cleaned_store_details = cleaner.clean_store_data(store_details)
 local_connector.upload_to_db(cleaned_store_details, "dim_store_details")
+
+# %%
+# Get S3 Bucket URL for CSV file
+with open("bucket_url.txt", "r") as url_file:
+    url = url_file.readline().strip()
+
+# %%
+# Clean up product data and upload to our local database as dim_products
+product_details = extractor.extract_from_s3(url)
+cleaned_product_details = cleaner.clean_products_data(product_details)
+local_connector.upload_to_db(cleaned_product_details, "dim_products")
+# %%
