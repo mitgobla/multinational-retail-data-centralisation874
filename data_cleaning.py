@@ -12,7 +12,7 @@ class DataCleaning:
         # Regex patterns from https://regexr.com Community Patterns
         self.uuid_regex = r'^[0-9A-Za-z]{8}-[0-9A-Za-z]{4}-4[0-9A-Za-z]{3}-[89ABab][0-9A-Za-z]{3}-[0-9A-Za-z]{12}$'
         self.email_regex = r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
-        self.currency_regex = r"\d*\.\d+|\d+"
+        self.currency_regex = r"(\d*\.\d+|\d+)"
         self.expiry_date_format = "%m/%y"
         self.payment_date_format = "%Y-%m-%d"
         self.store_date_format = "%Y-%m-%d"
@@ -290,7 +290,7 @@ class DataCleaning:
         cleaned_csv_data.loc[~cleaned_csv_data.uuid.str.match(self.uuid_regex, na=False), "uuid"] = pd.NA
 
         # Convert product_price to float, remove any characters before the number
-        cleaned_csv_data.loc[~cleaned_csv_data.product_price.str.match(self.currency_regex, na=False), "product_price"] = pd.NA
+        cleaned_csv_data.product_price = cleaned_csv_data.product_price.str.extract(self.currency_regex)
         cleaned_csv_data.product_price = cleaned_csv_data.product_price.astype("Float64")
 
         # Convert column types
