@@ -43,4 +43,11 @@ with open("bucket_url.txt", "r") as url_file:
 product_details = extractor.extract_from_s3(url)
 cleaned_product_details = cleaner.clean_products_data(product_details)
 local_connector.upload_to_db(cleaned_product_details, "dim_products")
+
+# %%
+# Clean up order data and upload to our local database as orders_table
+orders_details = extractor.read_rds_table("orders_table")
+cleaned_order_details = cleaner.clean_orders_data(orders_details)
+local_connector.upload_to_db(cleaned_order_details, "orders_table")
+
 # %%

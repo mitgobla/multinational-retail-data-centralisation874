@@ -311,6 +311,28 @@ class DataCleaning:
 
         return cleaned_csv_data
 
+    def clean_orders_data(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        """Clean data for the Orders DataFrame
+
+        Args:
+            dataframe (pd.DataFrame): DataFrame representing Order data
+
+        Returns:
+            pd.DataFrame: Cleaned Orders DataFrame
+        """
+        # Drop unnecessary columns
+        cleaned_orders_df = dataframe.drop(columns=["level_0", "index", "first_name", "last_name", "1"])
+        # Ensure columns are correct type
+        cleaned_orders_df = cleaned_orders_df.astype(
+            {
+                "date_uuid": "string",
+                "user_uuid": "string",
+                "store_code": "string",
+                "product_code": "string"
+            }
+        )
+        return cleaned_orders_df
+
 
 if __name__ == "__main__":
     from database_utils import DatabaseConnector
