@@ -36,6 +36,11 @@ class DataApplication:
         self.extractor = DataExtractor(self.rds_connector)
         self.cleaner = DataCleaning()
 
+    def read_url_from_file(self, path: str) -> str:
+        with open(path, "r") as url_file:
+            url = url_file.readline().strip()
+        return url
+
     @notify_time("User Details")
     def clean_legacy_users(self):
         """Run extract and clean methods for user details data."""
@@ -48,8 +53,7 @@ class DataApplication:
     def clean_card_details(self):
         """Run extract and clean methods for card details data."""
         # Get PDF url from file
-        with open("pdf_url.txt", "r") as url_file:
-            url = url_file.readline().strip()
+        url = self.read_url_from_file("pdf_url.txt")
 
         # Clean up card details PDF document and upload to our local database as dim_card_details
         card_details = self.extractor.retrieve_pdf_data(url)
@@ -69,8 +73,7 @@ class DataApplication:
     def clean_product_details(self):
         """Run extract and clean methods for product details data."""
         # Get S3 Bucket URL for CSV file
-        with open("product_bucket_url.txt", "r") as url_file:
-            url = url_file.readline().strip()
+        url = self.read_url_from_file("product_bucket_url.txt")
 
         # Clean up product data and upload to our local database as dim_products
         product_details = self.extractor.extract_from_s3(url)
@@ -90,8 +93,7 @@ class DataApplication:
     def clean_date_details(self):
         """Run extract and clean methods for date details data."""
         # Get date details JSON URL from file
-        with open("date_bucket_url.txt", "r") as url_file:
-            url = url_file.readline().strip()
+        url = self.read_url_from_file("date_bucket_url.txt")
 
         # Clean up date details and upload to our local database as dim_date_times
         date_details = self.extractor.extract_from_s3(url, data_type="json")
