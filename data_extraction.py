@@ -4,6 +4,7 @@ import yaml
 import requests
 import time
 import boto3
+import json
 from typing import List
 from database_utils import DatabaseConnector
 
@@ -90,11 +91,12 @@ class DataExtractor:
 
         return pd.DataFrame(store_jsons)
 
-    def extract_from_s3(self, s3_url: str) -> pd.DataFrame:
+    def extract_from_s3(self, s3_url: str, data_type: str = "csv") -> pd.DataFrame:
         """Download a CSV file from an S3 Bucket and parse it as a DataFrame
 
         Args:
             s3_url (str): Full URL of the file object.
+            data_type (str, optional): Type of data to parse. Defaults to 'csv'. Valid is 'csv', 'json'
 
         Returns:
             pd.DataFrame: DataFrame representing the CSV file.
@@ -105,8 +107,11 @@ class DataExtractor:
         s3_client = boto3.client('s3')
         s3_client.download_file(bucket, object_key, filename)
 
-        with open(filename, "r") as csv_file:
-            data = pd.read_csv(csv_file)
+        with open(filename, "r") as data_file:
+            if data_type == "csv":
+                data = pd.read_csv(data_file)
+            elif data_type == "json":
+                data = pd.read_json(data_file)
 
         return data
 

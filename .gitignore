@@ -166,3 +166,4 @@ cython_debug/
 *_creds.yaml
 *_url.txt
 *.csv
+*.json

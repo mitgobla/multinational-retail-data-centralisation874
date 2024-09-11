@@ -35,7 +35,7 @@ local_connector.upload_to_db(cleaned_store_details, "dim_store_details")
 
 # %%
 # Get S3 Bucket URL for CSV file
-with open("bucket_url.txt", "r") as url_file:
+with open("product_bucket_url.txt", "r") as url_file:
     url = url_file.readline().strip()
 
 # %%
@@ -49,5 +49,16 @@ local_connector.upload_to_db(cleaned_product_details, "dim_products")
 orders_details = extractor.read_rds_table("orders_table")
 cleaned_order_details = cleaner.clean_orders_data(orders_details)
 local_connector.upload_to_db(cleaned_order_details, "orders_table")
+
+# %%
+# Get date details JSON URL from file
+with open("date_bucket_url.txt", "r") as url_file:
+    url = url_file.readline().strip()
+
+# %%
+# Clean up date details and upload to our local database as dim_date_times
+date_details = extractor.extract_from_s3(url, data_type="json")
+cleaned_date_details = cleaner.clean_date_details_data(date_details)
+local_connector.upload_to_db(cleaned_date_details, "dim_date_times")
 
 # %%

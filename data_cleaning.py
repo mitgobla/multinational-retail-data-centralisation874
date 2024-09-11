@@ -333,6 +333,53 @@ class DataCleaning:
         )
         return cleaned_orders_df
 
+    def clean_date_details_data(self, dataframe: pd.DataFrame) -> pd.DataFrame:
+        """Clean data for the Date Details DataFrame
+
+        Args:
+            dataframe (pd.DataFrame): DataFrame representing Date Details data
+
+        Returns:
+            pd.DataFrame: Cleaned Date Details DataFrame
+        """
+        valid_time_periods = [
+            "Morning",
+            "Midday",
+            "Evening",
+            "Late_Hours"
+        ]
+        # Ensure time_period values are those that are valid
+        dataframe.loc[~dataframe.time_period.isin(valid_time_periods)] = pd.NA
+
+        # Combine date data into one column
+        dataframe["datetime_str"] = (
+            dataframe.day.astype("str")
+            + "-"
+            + dataframe.month.astype("str")
+            + "-"
+            + dataframe.year.astype("str")
+            + " "
+            + dataframe.timestamp
+        )
+        # Convert combined column into datetime
+        dataframe["datetime"] = pd.to_datetime(dataframe["datetime_str"], format="%d-%m-%Y %H:%M:%S", errors="coerce")
+        dataframe = dataframe.drop(columns=["datetime_str", "day", "month", "year", "timestamp"])
+
+        # Check UUID format
+        dataframe.loc[~dataframe.date_uuid.str.match(self.uuid_regex, na=False), "date_uuid"] = pd.NA
+
+        # Convert types
+        dataframe = dataframe.astype(
+            {
+                "time_period": "string",
+                "date_uuid": "string"
+            }
+        )
+
+        # Drop any rows with null values
+        dataframe = dataframe.dropna(how="any", axis="index")
+        return dataframe
+
 
 if __name__ == "__main__":
     from database_utils import DatabaseConnector
