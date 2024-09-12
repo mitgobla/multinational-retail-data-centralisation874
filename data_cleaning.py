@@ -1,17 +1,20 @@
+from datetime import datetime
+from dateutil.parser import parse
+from dateutil.parser._parser import ParserError
 import phonenumbers
 import re
 import pandas as pd
-
 
 class DataCleaning:
     """Class for cleaning data in a DataFrame"""
 
     def __init__(self):
         self.date_format = "%Y-%m-%d"
+        self.date_format_alt = "%Y %B %d"
 
         # Regex patterns from https://regexr.com Community Patterns
         self.uuid_regex = r'^[0-9A-Za-z]{8}-[0-9A-Za-z]{4}-4[0-9A-Za-z]{3}-[89ABab][0-9A-Za-z]{3}-[0-9A-Za-z]{12}$'
-        self.email_regex = r"^[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+        self.email_regex = r"^.+@.+\..+$"
         self.currency_regex = r"(\d*\.\d+|\d+)"
         self.expiry_date_format = "%m/%y"
         self.payment_date_format = "%Y-%m-%d"
@@ -31,6 +34,9 @@ class DataCleaning:
         # Ignore already NA values
         if type(phone) is not str:
             return None
+
+        if phone.startswith("00"):
+            phone = "+" + phone[2:]
 
         # Clean the phone number by removing (0), extensions, and other unnecessary characters
         phone = re.sub(r'\(0\)', '', phone)  # Remove (0)
@@ -52,6 +58,50 @@ class DataCleaning:
         except phonenumbers.phonenumberutil.NumberParseException:
             # Number could not be parsed
             return None
+
+    @staticmethod
+    def try_parse_date(date: str) -> datetime | None:
+        """Try to parse a date string using dateutils.parser
+
+        Args:
+            date (str): Date string to try to parse
+
+        Returns:
+            datetime | None: Parsed datetime, otherwise None on failure
+        """
+        if type(date) is not str:
+            return None
+
+        try:
+            return parse(date)
+        except ParserError:
+            return None
+
+    def parse_multiple_date_formats(self, dataframe: pd.DataFrame, column: str) -> pd.DataFrame:
+        """Parse a date column in a DataFrame that has multiple formats
+
+        Args:
+            dataframe (pd.DataFrame): DataFrame to apply parsing on
+            column (str): Name of column for parsing
+
+        Returns:
+            pd.DataFrame: Parsed DataFrame
+        """
+        # First pass
+        dataframe[column] = dataframe[column].apply(DataCleaning.try_parse_date)
+
+        # Second pass
+        parsed_dates = pd.to_datetime(
+            dataframe[column], errors="coerce", format=self.date_format
+        )
+        # Third pass to capture other format
+        mask = parsed_dates.isna()
+        dataframe.loc[mask, column] = pd.to_datetime(
+            dataframe.loc[mask, column] , errors="coerce", format=self.date_format_alt
+        )
+        # Combine results
+        dataframe[column] = dataframe[column].combine_first(parsed_dates)
+        return dataframe
 
     def clean_user_data(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         """Clean data for the user DataFrame from the database.
@@ -77,12 +127,9 @@ class DataCleaning:
         )
 
         # Convert object date columns to the datetime type
-        cleaned_df.date_of_birth = pd.to_datetime(
-            cleaned_df.date_of_birth, errors="coerce", format=self.date_format
-        )
-        cleaned_df.join_date = pd.to_datetime(
-            cleaned_df.join_date, errors="coerce", format=self.date_format
-        )
+        # Some of these dates are in different formats, need to perform two passes
+        cleaned_df = self.parse_multiple_date_formats(cleaned_df, "date_of_birth")
+        cleaned_df = self.parse_multiple_date_formats(cleaned_df, "join_date")
 
         # Null invalid UUID values
         # Pandas suggest using pd.NA over numpy.nan for string type columns.
@@ -94,15 +141,21 @@ class DataCleaning:
         # Some country codes are wrong
         cleaned_df.country_code = cleaned_df.country_code.replace("GGB", "GB")
 
+        # Disabled phone number parsing for now... too many edge cases.
+
         # Using country code to parse phone number column to international format
         # phonenumbers library helps here but still not perfectly...
         # apply parse_phone_number on each row so we have access to country_code column
-        cleaned_df.phone_number = cleaned_df.apply(
-            lambda row: self.parse_phone_number(row["phone_number"], row["country_code"]), axis=1 # type: ignore
-        )
-        cleaned_df.phone_number = cleaned_df.phone_number.astype("string") # Change column back to string from object
+        #cleaned_df.phone_number = cleaned_df.apply(
+        #    lambda row: self.parse_phone_number(row["phone_number"], row["country_code"]), axis=1 # type: ignore
+        #)
+        #cleaned_df.phone_number = cleaned_df.phone_number.astype("string") # Change column back to string from object
+
 
         # Ensure email addresses are valid
+        # Some contain double @, remove duplicates
+        cleaned_df.email_address = cleaned_df.email_address.str.replace(r'@+', '@', regex=True)
+        # Match basic email regex
         cleaned_df.loc[~cleaned_df.email_address.str.match(self.email_regex, na=False), "email_address"] = pd.NA
 
         # Some rows contain NULL which is not a valid pandas NA value, so replace them
@@ -113,6 +166,23 @@ class DataCleaning:
 
         return cleaned_df
 
+    @staticmethod
+    def extract_from_combined_card_data(row: pd.Series) -> pd.Series:
+        """Get card number and expiry date from the combined column
+
+        Args:
+            row (pd.Series): Row from card DataFrame
+
+        Returns:
+            pd.Series: Extracted card number and expiry date
+        """
+        if pd.isna(row["card_number"]) and pd.isna(row["expiry_date"]):
+            split_parts = row["card_number expiry_date"].split(' ', 1)
+            return pd.Series([split_parts[0], split_parts[1]])
+        else:
+            return pd.Series([row["card_number"], row["expiry_date"]])
+
+
     def clean_card_data(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         """Clean data for the card DataFrame.
 
@@ -122,9 +192,12 @@ class DataCleaning:
         Returns:
             pd.DataFrame: Cleaned DataFrame
         """
-        # Drop columns that have been incorrectly detected by tabula
-        cleaned_df = dataframe.drop(columns=['card_number expiry_date', 'Unnamed: 0'])
+        # Get data from combined column and split
+        dataframe[["card_number", "expiry_date"]] = dataframe.apply(DataCleaning.extract_from_combined_card_data, axis=1)
 
+        # Drop columns that are not required
+        cleaned_df = dataframe.drop(columns=['card_number expiry_date', 'Unnamed: 0'])
+        cleaned_df.card_number = cleaned_df.card_number.astype("string")
 
         # replace NULL with panda NA
         cleaned_df = cleaned_df.replace("NULL", pd.NA)
@@ -134,14 +207,14 @@ class DataCleaning:
         cleaned_df.card_number = cleaned_df.card_number.replace('', pd.NA, regex=True)
 
         # Convert column to their respective types
-        cleaned_df.card_number = pd.to_numeric(cleaned_df.card_number, errors='coerce').astype("Int64") # This Dtype allows null values
+        #cleaned_df.card_number = pd.to_numeric(cleaned_df.card_number, errors='coerce').astype("Int64") # This Dtype allows null values
         cleaned_df.card_provider = cleaned_df.card_provider.astype("string")
         cleaned_df.expiry_date = pd.to_datetime(
     cleaned_df.expiry_date, errors="coerce", format=self.expiry_date_format
         )
-        cleaned_df.date_payment_confirmed = pd.to_datetime(
-            cleaned_df.date_payment_confirmed, errors="coerce", format=self.payment_date_format
-        )
+
+        # Parse payment confirmed date
+        cleaned_df = self.parse_multiple_date_formats(cleaned_df, "date_payment_confirmed")
 
         # Finally drop any rows that have null values
         cleaned_df = cleaned_df.dropna(how='any', axis='index')
@@ -187,7 +260,7 @@ class DataCleaning:
         cleaned_store_df.latitude = pd.to_numeric(cleaned_store_df.latitude, errors="coerce").astype("float")
 
         # Convert opening date
-        cleaned_store_df.opening_date = pd.to_datetime(cleaned_store_df.opening_date, errors="coerce", format=self.store_date_format)
+        cleaned_store_df = self.parse_multiple_date_formats(cleaned_store_df, "opening_date")
 
         # Only get rows whose country_code is a valid one
         country_codes = ["GB", "DE", "US"]
@@ -197,8 +270,10 @@ class DataCleaning:
         # Correct some mistyped continent names
         cleaned_store_df.loc[:, "continent"] = cleaned_store_df["continent"].str.replace("ee", "")
 
-        # Finally drop any rows with null values
-        cleaned_store_df = cleaned_store_df.dropna(how="any", axis="index")
+        # Web Portal has NA values but we want to keep it
+        # Drop other rows that have NA values
+        web_mask = cleaned_store_df["store_type"] == "Web Portal"
+        cleaned_store_df = cleaned_store_df[web_mask | cleaned_store_df.drop(columns=["store_type"]).notna().all(axis=1)]
 
         return cleaned_store_df
 
@@ -261,6 +336,9 @@ class DataCleaning:
         elif unit == "kg":
             # Already kilos
             return multiplied_value
+        elif unit == "oz":
+            # Convert oz to kg
+            return multiplied_value / 35.274
         # Unknown unit or other
         return
 
@@ -275,6 +353,9 @@ class DataCleaning:
         """
         # Drop additional index column
         cleaned_csv_data = dataframe.drop(columns=["Unnamed: 0"])
+        product_code_test = "A8-4686892S"
+        print("------------ BEFORE ------------")
+        print(cleaned_csv_data[cleaned_csv_data.product_code == product_code_test])
 
         # Convert weights to floats
         cleaned_csv_data.weight = cleaned_csv_data.weight.apply(self.convert_product_weights)
@@ -305,7 +386,10 @@ class DataCleaning:
         cleaned_csv_data.EAN = pd.to_numeric(cleaned_csv_data.EAN, errors="coerce").astype("int64", errors="ignore")
 
         # Convert date column
-        cleaned_csv_data.date_added = pd.to_datetime(cleaned_csv_data.date_added, errors="coerce", format=self.product_date_format)
+        cleaned_csv_data = self.parse_multiple_date_formats(cleaned_csv_data, "date_added")
+
+        print("------------ AFTER ------------")
+        print(cleaned_csv_data[cleaned_csv_data.product_code == product_code_test])
 
         # Finally drop any rows with NA values
         cleaned_csv_data = cleaned_csv_data.dropna(how="any", axis="index")
