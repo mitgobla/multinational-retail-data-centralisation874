@@ -27,6 +27,7 @@ Therefore, the data needs to be cleaned so that it is ready to be uploaded to th
     - [Usage instructions](#usage-instructions)
   - [Modifying database schema](#modifying-database-schema)
   - [Querying the data](#querying-the-data)
+  - [ERD Diagram](#erd-diagram)
   - [Reflection on Project](#reflection-on-project)
   - [License](#license)
 
@@ -117,7 +118,13 @@ At the stage of creating constraints on the orders table to the keys in the othe
 
 ## Querying the data
 
-In the `db_queries` folder are SQL statements for querying the finalized database to answer specific questions. 
+In the `db_queries` folder are SQL statements for querying the finalized database to answer specific questions.
+
+## ERD Diagram
+
+Once the relationships are defined, the database represents a Star Schema.
+
+![ERD Diagram](docs/erd_diagram.png)
 
 ## Reflection on Project
 
